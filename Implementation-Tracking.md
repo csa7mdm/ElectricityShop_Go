@@ -2,6 +2,7 @@
 
 ## Current Status
 - **Current Phase**: Phase 2: Core Backend
+=======
 - **Implementation Date**: 2025-05-29
 - **Status**: In Progress
 
@@ -13,7 +14,6 @@
 - [x] Implement basic domain entities
 - [x] Create React project with TypeScript
 - [x] Set up Docker development environment
-
 ### Phase 2: Core Backend (In Progress)
 - [x] Implement CQRS mediator pattern
 - [ ] Create all command/query handlers
@@ -23,6 +23,7 @@
 - [ ] Implement JWT authentication
 - [ ] Create REST API endpoints
   - [x] Implement User Auth REST API endpoints (/register, /login)
+=======
 
 ### Phase 3: Advanced Features
 - [ ] Add Redis caching
