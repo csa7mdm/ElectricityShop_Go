@@ -2,105 +2,81 @@ package handlers
 
 import (
 	"context"
+	"fmt" // For errors
 
+	"github.com/yourusername/electricity-shop-go/internal/application/dtos"
 	"github.com/yourusername/electricity-shop-go/internal/application/queries"
-	"github.com/yourusername/electricity-shop-go/internal/domain/entities"
-	"github.com/yourusername/electricity-shop-go/internal/domain/interfaces"
-	"github.com/yourusername/electricity-shop-go/pkg/errors"
-	"github.com/yourusername/electricity-shop-go/pkg/logger"
-	"github.com/yourusername/electricity-shop-go/pkg/mediator"
+	// "github.com/yourusername/electricity-shop-go/internal/domain/entities" // Not directly needed if dtos.UserResponse takes basic types. Actually it is for user.Role etc.
+	domainInterfaces "github.com/yourusername/electricity-shop-go/internal/domain/interfaces"
+	"github.com/yourusername/electricity-shop-go/pkg/mediator" // For mediator.Query
 )
 
-// UserQueryHandler handles user-related queries
-type UserQueryHandler struct {
-	userRepo    interfaces.UserRepository
-	addressRepo interfaces.AddressRepository
-	logger      logger.Logger
+// GetUserByIdQueryHandler handles GetUserByIdQuery.
+type GetUserByIdQueryHandler struct {
+	userRepository domainInterfaces.UserRepository
 }
 
-// NewUserQueryHandler creates a new UserQueryHandler
-func NewUserQueryHandler(
-	userRepo interfaces.UserRepository,
-	addressRepo interfaces.AddressRepository,
-	logger logger.Logger,
-) *UserQueryHandler {
-	return &UserQueryHandler{
-		userRepo:    userRepo,
-		addressRepo: addressRepo,
-		logger:      logger,
+// NewGetUserByIdQueryHandler creates a new GetUserByIdQueryHandler.
+func NewGetUserByIdQueryHandler(userRepo domainInterfaces.UserRepository) *GetUserByIdQueryHandler {
+	return &GetUserByIdQueryHandler{userRepository: userRepo}
+}
+
+func (h *GetUserByIdQueryHandler) Handle(ctx context.Context, query mediator.Query) (interface{}, error) {
+	cmd, ok := query.(*queries.GetUserByIdQuery)
+	if !ok {
+		return nil, fmt.Errorf("invalid query type for GetUserByIdQueryHandler")
 	}
-}
 
-// Handle handles queries
-func (h *UserQueryHandler) Handle(ctx context.Context, query mediator.Query) (interface{}, error) {
-	switch q := query.(type) {
-	case *queries.GetUserByIDQuery:
-		return h.handleGetUserByID(ctx, q)
-	case *queries.GetUserByEmailQuery:
-		return h.handleGetUserByEmail(ctx, q)
-	case *queries.ListUsersQuery:
-		return h.handleListUsers(ctx, q)
-	case *queries.GetUserAddressesQuery:
-		return h.handleGetUserAddresses(ctx, q)
-	default:
-		return nil, errors.New("UNSUPPORTED_QUERY", "Unsupported query type", 400)
-	}
-}
-
-// handleGetUserByID handles getting a user by ID
-func (h *UserQueryHandler) handleGetUserByID(ctx context.Context, query *queries.GetUserByIDQuery) (*entities.User, error) {
-	h.logger.WithContext(ctx).Debugf("Getting user by ID: %s", query.UserID)
-	
-	user, err := h.userRepo.GetByID(ctx, query.UserID)
+	user, err := h.userRepository.GetByID(ctx, cmd.ID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error fetching user by ID: %w", err) // Propagate error
 	}
-	
-	h.logger.WithContext(ctx).Debugf("Successfully retrieved user: %s", user.ID)
-	return user, nil
+	if user == nil {
+		// Consider returning a domain-specific error like pkg/errors.ErrUserNotFound
+		return nil, fmt.Errorf("user not found")
+	}
+
+	response := &dtos.UserResponse{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Role:      string(user.Role),
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+	return response, nil
 }
 
-// handleGetUserByEmail handles getting a user by email
-func (h *UserQueryHandler) handleGetUserByEmail(ctx context.Context, query *queries.GetUserByEmailQuery) (*entities.User, error) {
-	h.logger.WithContext(ctx).Debugf("Getting user by email: %s", query.Email)
-	
-	user, err := h.userRepo.GetByEmail(ctx, query.Email)
-	if err != nil {
-		return nil, err
-	}
-	
-	h.logger.WithContext(ctx).Debugf("Successfully retrieved user: %s", user.ID)
-	return user, nil
+// GetUserByEmailQueryHandler handles GetUserByEmailQuery.
+type GetUserByEmailQueryHandler struct {
+	userRepository domainInterfaces.UserRepository
 }
 
-// handleListUsers handles listing users with filtering
-func (h *UserQueryHandler) handleListUsers(ctx context.Context, query *queries.ListUsersQuery) ([]*entities.User, error) {
-	h.logger.WithContext(ctx).Debugf("Listing users with filter")
-	
-	users, err := h.userRepo.List(ctx, query.Filter)
-	if err != nil {
-		return nil, err
-	}
-	
-	h.logger.WithContext(ctx).Debugf("Successfully retrieved %d users", len(users))
-	return users, nil
+// NewGetUserByEmailQueryHandler creates a new GetUserByEmailQueryHandler.
+func NewGetUserByEmailQueryHandler(userRepo domainInterfaces.UserRepository) *GetUserByEmailQueryHandler {
+	return &GetUserByEmailQueryHandler{userRepository: userRepo}
 }
 
-// handleGetUserAddresses handles getting user addresses
-func (h *UserQueryHandler) handleGetUserAddresses(ctx context.Context, query *queries.GetUserAddressesQuery) ([]*entities.Address, error) {
-	h.logger.WithContext(ctx).Debugf("Getting addresses for user: %s", query.UserID)
-	
-	// Verify user exists
-	_, err := h.userRepo.GetByID(ctx, query.UserID)
-	if err != nil {
-		return nil, err
+func (h *GetUserByEmailQueryHandler) Handle(ctx context.Context, query mediator.Query) (interface{}, error) {
+	cmd, ok := query.(*queries.GetUserByEmailQuery)
+	if !ok {
+		return nil, fmt.Errorf("invalid query type for GetUserByEmailQueryHandler")
 	}
-	
-	addresses, err := h.addressRepo.GetByUserID(ctx, query.UserID)
+
+	user, err := h.userRepository.GetByEmail(ctx, cmd.Email)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error fetching user by email: %w", err) // Propagate error
 	}
-	
-	h.logger.WithContext(ctx).Debugf("Successfully retrieved %d addresses for user: %s", len(addresses), query.UserID)
-	return addresses, nil
+	if user == nil {
+		// Consider returning a domain-specific error like pkg/errors.ErrUserNotFound
+		return nil, fmt.Errorf("user not found")
+	}
+
+	response := &dtos.UserResponse{
+		ID:        user.ID.String(),
+		Email:     user.Email,
+		Role:      string(user.Role),
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}
+	return response, nil
 }

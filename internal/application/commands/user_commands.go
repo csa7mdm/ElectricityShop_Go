@@ -5,18 +5,15 @@ import (
 	"github.com/yourusername/electricity-shop-go/internal/domain/entities"
 )
 
-// RegisterUserCommand represents a user registration command
+// RegisterUserCommand represents the command to register a new user.
 type RegisterUserCommand struct {
-	Email     string             `json:"email" validate:"required,email"`
-	Password  string             `json:"password" validate:"required,min=8"`
-	FirstName string             `json:"first_name" validate:"required"`
-	LastName  string             `json:"last_name" validate:"required"`
-	Phone     string             `json:"phone,omitempty"`
-	Role      entities.UserRole  `json:"role,omitempty"`
+	Email    string
+	Password string
+	// Role can be added here if clients can specify it, or set by default in handler
 }
 
-func (c RegisterUserCommand) GetName() string {
-	return "RegisterUser"
+func (c *RegisterUserCommand) GetName() string {
+	return "RegisterUserCommand"
 }
 
 // UpdateUserProfileCommand represents a user profile update command
@@ -89,4 +86,14 @@ type DeleteAddressCommand struct {
 
 func (c DeleteAddressCommand) GetName() string {
 	return "DeleteAddress"
+}
+
+// LoginUserCommand represents the command to log in a user.
+type LoginUserCommand struct {
+	Email    string
+	Password string
+}
+
+func (c *LoginUserCommand) GetName() string {
+	return "LoginUserCommand"
 }
