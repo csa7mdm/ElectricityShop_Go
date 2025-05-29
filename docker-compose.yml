@@ -1,0 +1,65 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: electricity_shop
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes: # Optional: to persist data
+      - postgres_data:/var/lib/postgresql/data
+  
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes: # Optional: to persist data
+      - redis_data:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management # Use rabbitmq:3-management-alpine for a smaller image
+    ports:
+      - "5672:5672"  # AMQP port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: guest # Default user, consider changing for production
+      RABBITMQ_DEFAULT_PASS: guest # Default pass, consider changing for production
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+    environment: # Example: pass database credentials
+      GIN_MODE: debug # or release
+      # Add other necessary environment variables for the backend
+      # POSTGRES_HOST: postgres
+      # POSTGRES_PORT: 5432
+      # POSTGRES_USER: postgres
+      # POSTGRES_PASSWORD: postgres
+      # POSTGRES_DB: electricity_shop
+      # REDIS_ADDR: redis:6379
+      # RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+  
+  frontend:
+    build:
+      context: ./web # Ensure this context is correct
+      dockerfile: Dockerfile # This refers to web/Dockerfile
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend # Optional: if frontend needs backend to be up for build/runtime
+    environment:
+      REACT_APP_API_URL: http://localhost:8080/api # Example for React app
+      # Add other necessary environment variables for the frontend
+
+volumes: # Define named volumes for data persistence
+  postgres_data:
+  redis_data:
