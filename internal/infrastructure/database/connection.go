@@ -2,47 +2,69 @@ package database
 
 import (
 	"fmt"
-	"log" // Or a proper logger
+	"log"
 	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"github.com/yourusername/electricity-shop-go/internal/domain/entities" // For migrations
 )
 
 var DB *gorm.DB
 
+// NewPostgresConnection creates a new PostgreSQL database connection
+func NewPostgresConnection() (*gorm.DB, error) {
+	dsn := buildDSN()
+	
+	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+	
+	// Test the connection
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+	
+	if err := sqlDB.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+	
+	log.Println("Database connection established successfully")
+	return db, nil
+}
+
+// buildDSN builds the database connection string from environment variables
+func buildDSN() string {
+	host := getEnvOrDefault("DB_HOST", "localhost")
+	port := getEnvOrDefault("DB_PORT", "5432")
+	user := getEnvOrDefault("DB_USER", "postgres")
+	password := getEnvOrDefault("DB_PASSWORD", "postgres")
+	dbname := getEnvOrDefault("DB_NAME", "electricity_shop")
+	sslmode := getEnvOrDefault("DB_SSLMODE", "disable")
+	
+	return fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s TimeZone=UTC",
+		host, port, user, password, dbname, sslmode)
+}
+
+// getEnvOrDefault gets an environment variable or returns a default value
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// Legacy functions for backward compatibility
+
 func InitDatabase() error {
-	// TODO: Replace with proper configuration management (e.g., Viper)
-	dsn := os.Getenv("DATABASE_DSN")
-	if dsn == "" {
-		dsn = "host=localhost user=postgres password=postgres dbname=electricity_shop port=5432 sslmode=disable TimeZone=UTC"
-		log.Println("DATABASE_DSN not set, using default:", dsn)
-	}
-
 	var err error
-	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		return fmt.Errorf("failed to connect to database: %w", err)
-	}
-
-	log.Println("Database connection established.")
-
-	// Auto-migrate entities
-	log.Println("Running auto-migrations...")
-	err = DB.AutoMigrate(&entities.User{}, &entities.Category{}, &entities.Product{})
-	if err != nil {
-		return fmt.Errorf("failed to auto-migrate database: %w", err)
-	}
-	log.Println("Auto-migrations completed.")
-
-	return nil
+	DB, err = NewPostgresConnection()
+	return err
 }
 
 func GetDB() *gorm.DB {
 	if DB == nil {
-		// This scenario should ideally not happen if InitDatabase is called correctly at startup.
-		// Depending on the application's needs, this could panic, return an error, or attempt to re-initialize.
 		log.Fatal("Database not initialized. Call InitDatabase first.")
 	}
 	return DB

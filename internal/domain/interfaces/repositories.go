@@ -95,19 +95,7 @@ type AddressRepository interface {
 	Update(ctx context.Context, address *entities.Address) error
 	Delete(ctx context.Context, id uuid.UUID) error
 	SetAsDefault(ctx context.Context, addressID uuid.UUID, addressType entities.AddressType) error
-}
-
-// ProductReviewRepository defines the interface for product review data access
-type ProductReviewRepository interface {
-	Create(ctx context.Context, review *entities.ProductReview) error
-	GetByID(ctx context.Context, id uuid.UUID) (*entities.ProductReview, error)
-	GetByProductID(ctx context.Context, productID uuid.UUID, filter ReviewFilter) ([]*entities.ProductReview, error)
-	GetByUserID(ctx context.Context, userID uuid.UUID) ([]*entities.ProductReview, error)
-	Update(ctx context.Context, review *entities.ProductReview) error
-	Delete(ctx context.Context, id uuid.UUID) error
-	Approve(ctx context.Context, reviewID uuid.UUID) error
-	GetAverageRating(ctx context.Context, productID uuid.UUID) (float64, error)
-	GetRatingDistribution(ctx context.Context, productID uuid.UUID) (map[int]int, error)
+	UnsetDefaultForUser(ctx context.Context, userID uuid.UUID) error
 }
 
 // EventPublisher defines the interface for publishing domain events
@@ -218,5 +206,4 @@ type UnitOfWork interface {
 	OrderRepository() OrderRepository
 	PaymentRepository() PaymentRepository
 	AddressRepository() AddressRepository
-	ProductReviewRepository() ProductReviewRepository
 }

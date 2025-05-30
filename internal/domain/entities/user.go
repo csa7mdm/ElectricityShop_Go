@@ -3,6 +3,7 @@ package entities
 import (
 	"time"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // UserRole defines the type for user roles.
@@ -16,13 +17,24 @@ const (
 
 // User represents a user in the system.
 type User struct {
-	ID        uuid.UUID `gorm:"type:uuid;primary_key"`
-	Email     string    `gorm:"unique;not null"`
-	Password  string    `gorm:"not null"`
-	Role      UserRole  `gorm:"not null;type:varchar(50)"` // Added type for DB
-	// Profile   UserProfile // UserProfile is not defined yet, commenting out for now.
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:gen_random_uuid()" json:"id"`
+	Email     string    `gorm:"unique;not null" json:"email"`
+	Password  string    `gorm:"not null" json:"-"`
+	Role      UserRole  `gorm:"not null;type:varchar(50)" json:"role"`
+	IsActive  bool      `gorm:"not null;default:true" json:"is_active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+
+	// Relationships
+	Addresses []Address `gorm:"foreignKey:UserID" json:"addresses,omitempty"`
+}
+
+// BeforeCreate hook
+func (u *User) BeforeCreate(tx *gorm.DB) error {
+	if u.ID == uuid.Nil {
+		u.ID = uuid.New()
+	}
+	return nil
 }
 
 // TODO: Define UserProfile struct later.

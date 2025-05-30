@@ -53,8 +53,8 @@ type Order struct {
 	Total           decimal.Decimal `gorm:"type:decimal(10,2);not null" json:"total"`
 	Currency        string          `gorm:"type:varchar(3);default:'USD'" json:"currency"`
 	Notes           string          `gorm:"type:text" json:"notes"`
-	ShippingAddress Address         `gorm:"embedded;embeddedPrefix:shipping_" json:"shipping_address"`
-	BillingAddress  Address         `gorm:"embedded;embeddedPrefix:billing_" json:"billing_address"`
+	ShippingAddress EmbeddableAddress `gorm:"embedded;embeddedPrefix:shipping_" json:"shipping_address"`
+	BillingAddress  EmbeddableAddress `gorm:"embedded;embeddedPrefix:billing_" json:"billing_address"`
 	OrderedAt       time.Time       `json:"ordered_at"`
 	ShippedAt       *time.Time      `json:"shipped_at"`
 	DeliveredAt     *time.Time      `json:"delivered_at"`

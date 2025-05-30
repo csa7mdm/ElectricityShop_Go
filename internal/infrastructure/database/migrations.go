@@ -21,9 +21,6 @@ func RunMigrations(db *gorm.DB) error {
 		// Product-related entities
 		&entities.Category{},
 		&entities.Product{},
-		&entities.ProductImage{},
-		&entities.ProductAttribute{},
-		&entities.ProductReview{},
 		
 		// Cart-related entities
 		&entities.Cart{},
@@ -45,12 +42,10 @@ func SeedData(db *gorm.DB) error {
 	
 	if adminCount == 0 {
 		adminUser := &entities.User{
-			Email:     "admin@electricityshop.com",
-			Password:  "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password: password
-			Role:      entities.RoleAdmin,
-			FirstName: "Admin",
-			LastName:  "User",
-			IsActive:  true,
+			Email:    "admin@electricityshop.com",
+			Password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password: password
+			Role:     entities.RoleAdmin,
+			IsActive: true,
 		}
 		if err := db.Create(adminUser).Error; err != nil {
 			return err
