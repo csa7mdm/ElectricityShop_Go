@@ -6,10 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
+	"github.com/yourusername/electricity-shop-go/internal/application/commands" // Added import
 	"github.com/yourusername/electricity-shop-go/internal/application/dtos"
-	"github.com/yourusername/electricity-shop-go/internal/domain/entities"
+	"github.com/yourusername/electricity-shop-go/internal/domain/entities" // Keep for Login response for now
 	"github.com/yourusername/electricity-shop-go/internal/presentation/responses"
-	"github.com/yourusername/electricity-shop-go/pkg/auth"
+	// "github.com/yourusername/electricity-shop-go/pkg/auth" // Removed authService dependency
 	"github.com/yourusername/electricity-shop-go/pkg/errors"
 	"github.com/yourusername/electricity-shop-go/pkg/logger"
 	"github.com/yourusername/electricity-shop-go/pkg/mediator"
@@ -17,17 +18,17 @@ import (
 
 // SimpleUserController handles user-related HTTP requests with direct dependencies
 type SimpleUserController struct {
-	authService *auth.AuthService
-	logger      logger.Logger
-	validator   *validator.Validate
+	mediator  mediator.Mediator // Changed from authService
+	logger    logger.Logger
+	validator *validator.Validate
 }
 
 // NewSimpleUserController creates a new SimpleUserController
-func NewSimpleUserController(authService *auth.AuthService, logger logger.Logger) *SimpleUserController {
+func NewSimpleUserController(mediator mediator.Mediator, logger logger.Logger) *SimpleUserController { // Changed signature
 	return &SimpleUserController{
-		authService: authService,
-		logger:      logger,
-		validator:   validator.New(),
+		mediator:  mediator, // Changed from authService
+		logger:    logger,
+		validator: validator.New(),
 	}
 }
 
@@ -36,29 +37,43 @@ func (uc *SimpleUserController) RegisterUser(c *gin.Context) {
 	var req dtos.RegisterUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		uc.logger.Errorf("Failed to bind request for user registration: %v", err)
-		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Invalid request body", "INVALID_INPUT"))
+		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Invalid request body", errors.ErrorCodeInvalidInput))
 		return
 	}
 
 	// Validate request
 	if err := uc.validator.Struct(&req); err != nil {
 		uc.logger.Errorf("Validation failed for user registration: %v", err)
-		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Validation failed", "VALIDATION_ERROR"))
+		// It's good practice to provide more specific validation error details if possible
+		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Validation failed: "+err.Error(), errors.ErrorCodeValidation))
 		return
 	}
 
-	// For now, return success without actually creating user
-	// TODO: Connect to actual user creation logic
 	uc.logger.Infof("Registration request received for email: %s", req.Email)
-	
-	// Simulate user creation
-	userID := uuid.New()
-	
-	c.JSON(http.StatusCreated, responses.NewSuccessResponse(gin.H{
-		"id": userID.String(),
-		"email": req.Email,
-		"message": "User registration successful (demo mode)",
-	}, "User registered successfully"))
+
+	cmd := commands.RegisterUserCommand{
+		Email:    req.Email,
+		Password: req.Password,
+		FullName: req.FullName,
+	}
+
+	_, err := uc.mediator.Send(c.Request.Context(), &cmd)
+	if err != nil {
+		uc.logger.Errorf("Failed to register user: %v", err)
+		apiErr := errors.ExtractAPIError(err)
+		if apiErr != nil {
+			if apiErr.Code == errors.ErrorCodeUserAlreadyExists {
+				c.JSON(http.StatusConflict, responses.NewErrorResponse(apiErr.Message, apiErr.Code))
+				return
+			}
+			c.JSON(apiErr.StatusCode, responses.NewErrorResponse(apiErr.Message, apiErr.Code))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, responses.NewErrorResponse("Failed to register user", errors.ErrorCodeInternalServer))
+		return
+	}
+
+	c.JSON(http.StatusCreated, responses.NewSuccessResponse(nil, "User registered successfully"))
 }
 
 // Login handles user authentication
@@ -66,42 +81,45 @@ func (uc *SimpleUserController) Login(c *gin.Context) {
 	var req dtos.LoginUserRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		uc.logger.Errorf("Failed to bind request for user login: %v", err)
-		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Invalid request body", "INVALID_INPUT"))
+		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Invalid request body", errors.ErrorCodeInvalidInput))
 		return
 	}
 
 	// Validate request
 	if err := uc.validator.Struct(&req); err != nil {
 		uc.logger.Errorf("Validation failed for user login: %v", err)
-		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Validation failed", "VALIDATION_ERROR"))
+		c.JSON(http.StatusBadRequest, responses.NewErrorResponse("Validation failed: "+err.Error(), errors.ErrorCodeValidation))
 		return
 	}
 
 	uc.logger.Infof("Login request received for email: %s", req.Email)
-	
-	// For demo purposes, create a test user and token
-	// TODO: Connect to actual user authentication logic
-	
-	// Demo: Accept any email/password combination for testing
-	if req.Email == "" || req.Password == "" {
-		c.JSON(http.StatusUnauthorized, responses.NewErrorResponse("Email and password required", "INVALID_CREDENTIALS"))
-		return
+
+	cmd := commands.LoginUserCommand{
+		Email:    req.Email,
+		Password: req.Password,
 	}
-	
-	// Generate a real JWT token for testing
-	userID := uuid.New()
-	token, err := uc.authService.GenerateToken(userID, req.Email, entities.RoleCustomer)
+
+	result, err := uc.mediator.Send(c.Request.Context(), &cmd)
 	if err != nil {
-		uc.logger.Errorf("Failed to generate token: %v", err)
-		c.JSON(http.StatusInternalServerError, responses.NewErrorResponse("Failed to generate token", "TOKEN_ERROR"))
+		uc.logger.Errorf("Failed to login user: %v", err)
+		apiErr := errors.ExtractAPIError(err)
+		if apiErr != nil {
+			if apiErr.Code == errors.ErrorCodeInvalidCredentials {
+				c.JSON(http.StatusUnauthorized, responses.NewErrorResponse(apiErr.Message, apiErr.Code))
+				return
+			}
+			c.JSON(apiErr.StatusCode, responses.NewErrorResponse(apiErr.Message, apiErr.Code))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, responses.NewErrorResponse("Failed to login", errors.ErrorCodeInternalServer))
 		return
 	}
-	
-	loginResponse := &dtos.LoginUserResponse{
-		ID:    userID.String(),
-		Email: req.Email,
-		Role:  "customer",
-		Token: token,
+
+	loginResponse, ok := result.(*dtos.LoginUserResponse)
+	if !ok {
+		uc.logger.Errorf("Login command returned unexpected type: %T", result)
+		c.JSON(http.StatusInternalServerError, responses.NewErrorResponse("Failed to process login response", errors.ErrorCodeInternalServer))
+		return
 	}
 
 	c.JSON(http.StatusOK, responses.NewSuccessResponse(loginResponse, "Login successful"))
