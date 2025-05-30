@@ -11,10 +11,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+
+	// Added/Verified Imports
+	"github.com/yourusername/electricity-shop-go/internal/application/commands"
+	"github.com/yourusername/electricity-shop-go/internal/application/handlers"
+	"github.com/yourusername/electricity-shop-go/internal/infrastructure/database"
+	"github.com/yourusername/electricity-shop-go/internal/infrastructure/database/repositories"
+	"github.com/yourusername/electricity-shop-go/internal/infrastructure/messaging"
 	"github.com/yourusername/electricity-shop-go/internal/presentation/controllers"
 	"github.com/yourusername/electricity-shop-go/internal/presentation/middleware"
 	"github.com/yourusername/electricity-shop-go/pkg/auth"
 	"github.com/yourusername/electricity-shop-go/pkg/logger"
+	"github.com/yourusername/electricity-shop-go/pkg/mediator"
+	// gorm "gorm.io/gorm" // Implicitly used by database package
 )
 
 func main() {
@@ -24,11 +33,24 @@ func main() {
 			log.Println("No .env file found, using system environment variables")
 		}
 	}
-	
+
 	// Initialize logger
 	appLogger := logger.NewLogger()
 	appLogger.Info("🚀 Starting ElectricityShop Authentication Server...")
-	
+
+	// Initialize Database
+	db, err := database.NewPostgresConnection()
+	if err != nil {
+		appLogger.Fatalf("🚨 Failed to connect to database: %v", err)
+	}
+	appLogger.Info("🔗 Database connection established.")
+
+	// Run Migrations
+	if err := database.RunMigrations(db); err != nil {
+		appLogger.Fatalf("🚨 Failed to run database migrations: %v", err)
+	}
+	appLogger.Info("🔄 Database migrations completed.")
+
 	// Initialize auth service
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
@@ -36,10 +58,31 @@ func main() {
 		appLogger.Warn("⚠️  Using default JWT secret - change in production!")
 	}
 	authService := auth.NewAuthService(jwtSecret, 24*time.Hour)
-	
+
+	// Initialize Repositories
+	userRepo := repositories.NewUserRepository(db)
+
+	// Initialize Event Publisher
+	eventPublisher := messaging.NewInMemoryEventPublisher(appLogger)
+
+	// Initialize Command Handlers
+	userCommandHandler := handlers.NewUserCommandHandler(userRepo, nil, eventPublisher, authService, appLogger)
+
+	// Initialize Mediator
+	mediatorInstance := mediator.NewConcreteMediator(appLogger) // Assuming NewConcreteMediator
+
+	// Register Handlers with Mediator
+	if err := mediatorInstance.RegisterCommandHandler(&commands.RegisterUserCommand{}, userCommandHandler); err != nil {
+		appLogger.Fatalf("🚨 Failed to register RegisterUserCommand handler: %v", err)
+	}
+	if err := mediatorInstance.RegisterQueryHandler(&commands.LoginUserCommand{}, userCommandHandler); err != nil {
+		appLogger.Fatalf("🚨 Failed to register LoginUserCommand handler: %v", err)
+	}
+	appLogger.Info("🔗 Mediator initialized and handlers registered.")
+
 	// Initialize controllers
-	userController := controllers.NewSimpleUserController(authService, appLogger)
-	
+	userController := controllers.NewSimpleUserController(mediatorInstance, appLogger) // Updated to use mediator
+
 	// Set Gin mode
 	if os.Getenv("APP_ENV") == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -194,14 +237,22 @@ func startServer(router *gin.Engine, appLogger logger.Logger) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	
+
 	appLogger.Info("🛑 Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	if err := server.Shutdown(ctx); err != nil {
 		log.Fatal("Server forced to shutdown:", err)
 	}
-	
+
+	// Close database connection
+	if sqlDB, errDb := db.DB(); errDb == nil {
+		appLogger.Info("Closing database connection...")
+		if errClose := sqlDB.Close(); errClose != nil {
+			appLogger.Errorf("Error closing database: %v", errClose)
+		}
+	}
+
 	appLogger.Info("✅ Server exited gracefully")
 }
